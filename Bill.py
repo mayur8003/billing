@@ -89,7 +89,7 @@ if menu == "Add Inventory":
 
     with st.form("inventory_form"):
 
-        # DROPDOWN
+        # EXISTING PRODUCT DROPDOWN
         selected_product = st.selectbox(
             "Select Existing Product",
             options=[""] + existing_products
@@ -112,7 +112,7 @@ if menu == "Add Inventory":
         )
 
         rate = st.number_input(
-            "Rate",
+            "Purchase Rate",
             min_value=0.0
         )
 
@@ -138,24 +138,44 @@ if menu == "Add Inventory":
                 # CHECK IF PRODUCT EXISTS
                 cursor.execute("""
                 SELECT opening_qty,
-                       available_qty
+                       available_qty,
+                       rate
                 FROM inventory
                 WHERE product_name = ?
                 """, (final_product_name,))
 
                 existing = cursor.fetchone()
 
+                # =====================================
                 # UPDATE EXISTING PRODUCT
+                # =====================================
+
                 if existing:
 
+                    old_opening_qty = existing[0]
+                    old_available_qty = existing[1]
+                    old_rate = existing[2]
+
+                    # NEW TOTAL QTY
                     updated_opening_qty = (
-                        existing[0] + opening_qty
+                        old_opening_qty + opening_qty
                     )
 
                     updated_available_qty = (
-                        existing[1] + opening_qty
+                        old_available_qty + opening_qty
                     )
 
+                    # WEIGHTED AVERAGE RATE
+                    weighted_avg_rate = (
+                        (
+                            old_opening_qty * old_rate
+                        ) +
+                        (
+                            opening_qty * rate
+                        )
+                    ) / updated_opening_qty
+
+                    # UPDATE INVENTORY
                     cursor.execute("""
                     UPDATE inventory
                     SET opening_qty = ?,
@@ -166,7 +186,7 @@ if menu == "Add Inventory":
                     """, (
                         updated_opening_qty,
                         updated_available_qty,
-                        rate,
+                        weighted_avg_rate,
                         unit,
                         final_product_name
                     ))
@@ -177,7 +197,14 @@ if menu == "Add Inventory":
                         "Existing Inventory Updated"
                     )
 
+                    st.subheader(
+                        f"Weighted Average Rate: ₹{round(weighted_avg_rate, 2)}"
+                    )
+
+                # =====================================
                 # INSERT NEW PRODUCT
+                # =====================================
+
                 else:
 
                     cursor.execute("""
@@ -292,7 +319,7 @@ elif menu == "Create Bill":
                     available_qty = result[0]
                     rate = result[1]
 
-                    # CHECK STOCK
+                    # STOCK CHECK
                     if quantity > available_qty:
 
                         st.error(
@@ -325,7 +352,7 @@ elif menu == "Create Bill":
                             total_amount
                         ))
 
-                        # UPDATE INVENTORY
+                        # UPDATE STOCK
                         new_stock = (
                             available_qty - quantity
                         )
@@ -346,11 +373,11 @@ elif menu == "Create Bill":
                         )
 
                         st.subheader(
-                            f"Total Amount: ₹{total_amount}"
+                            f"Total Amount: ₹{round(total_amount, 2)}"
                         )
 
                         st.subheader(
-                            f"Remaining Stock: {new_stock}"
+                            f"Remaining Stock: {round(new_stock, 2)}"
                         )
 
 # =========================================
