@@ -165,15 +165,32 @@ if menu == "Add Inventory":
                         old_available_qty + opening_qty
                     )
 
-                    # WEIGHTED AVERAGE RATE
-                    weighted_avg_rate = (
-                        (
-                            old_opening_qty * old_rate
-                        ) +
-                        (
-                            opening_qty * rate
-                        )
-                    ) / updated_opening_qty
+# =====================================
+# WEIGHTED AVERAGE LOGIC
+# =====================================
+
+# IF STOCK IS STILL AVAILABLE
+# THEN CALCULATE WEIGHTED AVERAGE
+
+if old_available_qty > 0:
+
+    weighted_avg_rate = (
+        (
+            old_available_qty * old_rate
+        ) +
+        (
+            opening_qty * rate
+        )
+    ) / (
+        old_available_qty + opening_qty
+    )
+
+# IF STOCK IS ZERO
+# THEN TAKE NEW PURCHASE RATE
+
+else:
+
+    weighted_avg_rate = rate
 
                     # UPDATE INVENTORY
                     cursor.execute("""
