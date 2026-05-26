@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-from datetime import datetime
 
 # =========================================
 # DATABASE CONNECTION
@@ -21,7 +20,7 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_name TEXT,
+    product_name TEXT UNIQUE,
     opening_qty REAL,
     available_qty REAL,
     rate REAL,
@@ -44,7 +43,23 @@ CREATE TABLE IF NOT EXISTS billing (
 conn.commit()
 
 # =========================================
-# PAGE CONFIGURATION
+# PRODUCT MASTER LIST
+# =========================================
+
+product_master = [
+    "TMT 8MM",
+    "TMT 10MM",
+    "TMT 12MM",
+    "TMT 16MM",
+    "TMT 20MM",
+    "Iron Ore",
+    "Coal",
+    "Billets",
+    "Scrap"
+]
+
+# =========================================
+# PAGE CONFIG
 # =========================================
 
 st.set_page_config(
@@ -65,7 +80,8 @@ menu = st.sidebar.radio(
         "View Inventory",
         "Create Bill",
         "Billing Report",
-        "Download Daily Excel"
+        "Download Daily Excel",
+        "Clear Complete Data"
     ]
 )
 
@@ -79,8 +95,9 @@ if menu == "Add Inventory":
 
     with st.form("inventory_form"):
 
-        product_name = st.text_input(
-            "Product Name"
+        product_name = st.selectbox(
+            "Select Product",
+            product_master
         )
 
         opening_qty = st.number_input(
@@ -104,28 +121,73 @@ if menu == "Add Inventory":
 
         if submit_inventory:
 
+            # CHECK IF PRODUCT ALREADY EXISTS
             cursor.execute("""
-            INSERT INTO inventory(
-                product_name,
-                opening_qty,
-                available_qty,
-                rate,
-                unit
-            )
-            VALUES (?, ?, ?, ?, ?)
-            """, (
-                product_name,
-                opening_qty,
-                opening_qty,
-                rate,
-                unit
-            ))
+            SELECT opening_qty,
+                   available_qty
+            FROM inventory
+            WHERE product_name = ?
+            """, (product_name,))
 
-            conn.commit()
+            existing = cursor.fetchone()
 
-            st.success(
-                "Inventory Added Successfully"
-            )
+            # IF EXISTS → UPDATE QTY
+            if existing:
+
+                new_opening = (
+                    existing[0] + opening_qty
+                )
+
+                new_available = (
+                    existing[1] + opening_qty
+                )
+
+                cursor.execute("""
+                UPDATE inventory
+                SET opening_qty = ?,
+                    available_qty = ?,
+                    rate = ?,
+                    unit = ?
+                WHERE product_name = ?
+                """, (
+                    new_opening,
+                    new_available,
+                    rate,
+                    unit,
+                    product_name
+                ))
+
+                conn.commit()
+
+                st.success(
+                    "Inventory Updated Successfully"
+                )
+
+            # NEW PRODUCT
+            else:
+
+                cursor.execute("""
+                INSERT INTO inventory(
+                    product_name,
+                    opening_qty,
+                    available_qty,
+                    rate,
+                    unit
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """, (
+                    product_name,
+                    opening_qty,
+                    opening_qty,
+                    rate,
+                    unit
+                ))
+
+                conn.commit()
+
+                st.success(
+                    "Inventory Added Successfully"
+                )
 
 # =========================================
 # VIEW INVENTORY
@@ -197,7 +259,8 @@ elif menu == "Create Bill":
             if generate_bill:
 
                 cursor.execute("""
-                SELECT available_qty, rate
+                SELECT available_qty,
+                       rate
                 FROM inventory
                 WHERE product_name = ?
                 """, (product_name,))
@@ -241,7 +304,7 @@ elif menu == "Create Bill":
                             total_amount
                         ))
 
-                        # UPDATE INVENTORY
+                        # UPDATE STOCK
                         new_stock = (
                             available_qty - quantity
                         )
@@ -289,12 +352,12 @@ elif menu == "Billing Report":
     )
 
 # =========================================
-# EXPORT DAILY EXCEL REPORT
+# EXPORT DAILY REPORT
 # =========================================
 
 elif menu == "Download Daily Excel":
 
-    st.header("📥 Export Daily Report")
+    st.header("📥 Export Daily Excel")
 
     selected_date = st.date_input(
         "Select Date"
@@ -342,6 +405,40 @@ elif menu == "Download Daily Excel":
 
             st.success(
                 "Excel Report Generated"
+            )
+
+# =========================================
+# CLEAR COMPLETE DATA
+# =========================================
+
+elif menu == "Clear Complete Data":
+
+    st.header("⚠️ Clear Complete Data")
+
+    st.warning(
+        "This will delete ALL inventory and billing data."
+    )
+
+    confirm = st.checkbox(
+        "I Confirm To Delete Complete Data"
+    )
+
+    if confirm:
+
+        if st.button("Delete All Data"):
+
+            cursor.execute(
+                "DELETE FROM inventory"
+            )
+
+            cursor.execute(
+                "DELETE FROM billing"
+            )
+
+            conn.commit()
+
+            st.success(
+                "Complete Data Deleted Successfully"
             )
 
 # =========================================
