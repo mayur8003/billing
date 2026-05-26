@@ -135,7 +135,7 @@ if menu == "Add Inventory":
 
             else:
 
-                # CHECK IF PRODUCT EXISTS
+                # CHECK EXISTING PRODUCT
                 cursor.execute("""
                 SELECT opening_qty,
                        available_qty,
@@ -156,7 +156,7 @@ if menu == "Add Inventory":
                     old_available_qty = existing[1]
                     old_rate = existing[2]
 
-                    # NEW TOTAL QTY
+                    # UPDATED QTY
                     updated_opening_qty = (
                         old_opening_qty + opening_qty
                     )
@@ -165,32 +165,28 @@ if menu == "Add Inventory":
                         old_available_qty + opening_qty
                     )
 
-# =====================================
-# WEIGHTED AVERAGE LOGIC
-# =====================================
+                    # =====================================
+                    # WEIGHTED AVERAGE LOGIC
+                    # =====================================
 
-# IF STOCK IS STILL AVAILABLE
-# THEN CALCULATE WEIGHTED AVERAGE
+                    # IF STOCK AVAILABLE
+                    if old_available_qty > 0:
 
-if old_available_qty > 0:
+                        weighted_avg_rate = (
+                            (
+                                old_available_qty * old_rate
+                            ) +
+                            (
+                                opening_qty * rate
+                            )
+                        ) / (
+                            old_available_qty + opening_qty
+                        )
 
-    weighted_avg_rate = (
-        (
-            old_available_qty * old_rate
-        ) +
-        (
-            opening_qty * rate
-        )
-    ) / (
-        old_available_qty + opening_qty
-    )
+                    # IF STOCK NIL
+                    else:
 
-# IF STOCK IS ZERO
-# THEN TAKE NEW PURCHASE RATE
-
-else:
-
-    weighted_avg_rate = rate
+                        weighted_avg_rate = rate
 
                     # UPDATE INVENTORY
                     cursor.execute("""
@@ -215,7 +211,7 @@ else:
                     )
 
                     st.subheader(
-                        f"Weighted Average Rate: ₹{round(weighted_avg_rate, 2)}"
+                        f"Updated Rate: ₹{round(weighted_avg_rate, 2)}"
                     )
 
                 # =====================================
