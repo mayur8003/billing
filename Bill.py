@@ -43,22 +43,6 @@ CREATE TABLE IF NOT EXISTS billing (
 conn.commit()
 
 # =========================================
-# PRODUCT MASTER LIST
-# =========================================
-
-product_master = [
-    "TMT 8MM",
-    "TMT 10MM",
-    "TMT 12MM",
-    "TMT 16MM",
-    "TMT 20MM",
-    "Iron Ore",
-    "Coal",
-    "Billets",
-    "Scrap"
-]
-
-# =========================================
 # PAGE CONFIG
 # =========================================
 
@@ -93,12 +77,34 @@ if menu == "Add Inventory":
 
     st.header("➕ Add Opening Inventory")
 
+    # FETCH EXISTING PRODUCTS
+    existing_products_df = pd.read_sql_query(
+        "SELECT product_name FROM inventory",
+        conn
+    )
+
+    existing_products = existing_products_df[
+        "product_name"
+    ].tolist()
+
     with st.form("inventory_form"):
 
-        product_name = st.selectbox(
-            "Select Product",
-            product_master
+        # DROPDOWN
+        selected_product = st.selectbox(
+            "Select Existing Product",
+            options=[""] + existing_products
         )
+
+        # NEW PRODUCT INPUT
+        new_product = st.text_input(
+            "Or Enter New Product Name"
+        )
+
+        # FINAL PRODUCT NAME
+        if new_product.strip() != "":
+            final_product_name = new_product.strip()
+        else:
+            final_product_name = selected_product
 
         opening_qty = st.number_input(
             "Opening Quantity",
@@ -121,73 +127,81 @@ if menu == "Add Inventory":
 
         if submit_inventory:
 
-            # CHECK IF PRODUCT ALREADY EXISTS
-            cursor.execute("""
-            SELECT opening_qty,
-                   available_qty
-            FROM inventory
-            WHERE product_name = ?
-            """, (product_name,))
+            if final_product_name == "":
 
-            existing = cursor.fetchone()
-
-            # IF EXISTS → UPDATE QTY
-            if existing:
-
-                new_opening = (
-                    existing[0] + opening_qty
+                st.error(
+                    "Please Enter Product Name"
                 )
 
-                new_available = (
-                    existing[1] + opening_qty
-                )
-
-                cursor.execute("""
-                UPDATE inventory
-                SET opening_qty = ?,
-                    available_qty = ?,
-                    rate = ?,
-                    unit = ?
-                WHERE product_name = ?
-                """, (
-                    new_opening,
-                    new_available,
-                    rate,
-                    unit,
-                    product_name
-                ))
-
-                conn.commit()
-
-                st.success(
-                    "Inventory Updated Successfully"
-                )
-
-            # NEW PRODUCT
             else:
 
+                # CHECK IF PRODUCT EXISTS
                 cursor.execute("""
-                INSERT INTO inventory(
-                    product_name,
-                    opening_qty,
-                    available_qty,
-                    rate,
-                    unit
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """, (
-                    product_name,
-                    opening_qty,
-                    opening_qty,
-                    rate,
-                    unit
-                ))
+                SELECT opening_qty,
+                       available_qty
+                FROM inventory
+                WHERE product_name = ?
+                """, (final_product_name,))
 
-                conn.commit()
+                existing = cursor.fetchone()
 
-                st.success(
-                    "Inventory Added Successfully"
-                )
+                # UPDATE EXISTING PRODUCT
+                if existing:
+
+                    updated_opening_qty = (
+                        existing[0] + opening_qty
+                    )
+
+                    updated_available_qty = (
+                        existing[1] + opening_qty
+                    )
+
+                    cursor.execute("""
+                    UPDATE inventory
+                    SET opening_qty = ?,
+                        available_qty = ?,
+                        rate = ?,
+                        unit = ?
+                    WHERE product_name = ?
+                    """, (
+                        updated_opening_qty,
+                        updated_available_qty,
+                        rate,
+                        unit,
+                        final_product_name
+                    ))
+
+                    conn.commit()
+
+                    st.success(
+                        "Existing Inventory Updated"
+                    )
+
+                # INSERT NEW PRODUCT
+                else:
+
+                    cursor.execute("""
+                    INSERT INTO inventory(
+                        product_name,
+                        opening_qty,
+                        available_qty,
+                        rate,
+                        unit
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        final_product_name,
+                        opening_qty,
+                        opening_qty,
+                        rate,
+                        unit
+                    ))
+
+                    conn.commit()
+
+                    st.success(
+                        "New Inventory Added"
+                    )
 
 # =========================================
 # VIEW INVENTORY
@@ -198,7 +212,10 @@ elif menu == "View Inventory":
     st.header("📋 Current Inventory")
 
     df_inventory = pd.read_sql_query(
-        "SELECT * FROM inventory",
+        """
+        SELECT *
+        FROM inventory
+        """,
         conn
     )
 
@@ -216,7 +233,10 @@ elif menu == "Create Bill":
     st.header("🧾 Create Sales Bill")
 
     products_df = pd.read_sql_query(
-        "SELECT product_name FROM inventory",
+        """
+        SELECT product_name
+        FROM inventory
+        """,
         conn
     )
 
@@ -272,6 +292,7 @@ elif menu == "Create Bill":
                     available_qty = result[0]
                     rate = result[1]
 
+                    # CHECK STOCK
                     if quantity > available_qty:
 
                         st.error(
@@ -304,7 +325,7 @@ elif menu == "Create Bill":
                             total_amount
                         ))
 
-                        # UPDATE STOCK
+                        # UPDATE INVENTORY
                         new_stock = (
                             available_qty - quantity
                         )
@@ -340,11 +361,14 @@ elif menu == "Billing Report":
 
     st.header("📊 Billing Report")
 
-    billing_df = pd.read_sql_query("""
-    SELECT *
-    FROM billing
-    ORDER BY invoice_no DESC
-    """, conn)
+    billing_df = pd.read_sql_query(
+        """
+        SELECT *
+        FROM billing
+        ORDER BY invoice_no DESC
+        """,
+        conn
+    )
 
     st.dataframe(
         billing_df,
@@ -352,18 +376,20 @@ elif menu == "Billing Report":
     )
 
 # =========================================
-# EXPORT DAILY REPORT
+# DOWNLOAD DAILY EXCEL
 # =========================================
 
 elif menu == "Download Daily Excel":
 
-    st.header("📥 Export Daily Excel")
+    st.header("📥 Export Daily Report")
 
     selected_date = st.date_input(
         "Select Date"
     )
 
-    if st.button("Generate Excel Report"):
+    if st.button(
+        "Generate Excel Report"
+    ):
 
         query = """
         SELECT *
@@ -416,7 +442,7 @@ elif menu == "Clear Complete Data":
     st.header("⚠️ Clear Complete Data")
 
     st.warning(
-        "This will delete ALL inventory and billing data."
+        "This will permanently delete all Inventory and Billing data."
     )
 
     confirm = st.checkbox(
@@ -425,7 +451,9 @@ elif menu == "Clear Complete Data":
 
     if confirm:
 
-        if st.button("Delete All Data"):
+        if st.button(
+            "Delete Complete Data"
+        ):
 
             cursor.execute(
                 "DELETE FROM inventory"
